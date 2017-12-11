@@ -311,7 +311,11 @@ fun check-templates(binds, e :: Expr, typ :: Type, context :: Context):
         print("\n")
       else:
         # TODO(purag): get the annotation for each arg here instead of nothing
-        each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false), context) end, args)
+        # each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false), context) end, args)
+
+        # TODO(purag): bad hack. for throwUnfinishedTemplate, the above wasn't
+        # propagating the type correctly
+        each(lam(arg): check-templates(binds, arg, typ, context) end, args)
       end
     end
     | s-app-enriched(l, _fun, args, app-info) => block:
@@ -362,8 +366,10 @@ fun check-templates(binds, e :: Expr, typ :: Type, context :: Context):
     | s-block(l, stmts) => block:
       print("s-block")
       # TODO(purag): do I really need to use t-top here?
-      each(lam(stmt): check-templates(binds, stmt, t-top(A.dummy-loc, false), context) end, stmts)
-      check-templates(binds, stmts.last(), typ, context)
+      # each(lam(stmt): check-templates(binds, stmt, t-top(A.dummy-loc, false), context) end, stmts)
+      # check-templates(binds, stmts.last(), typ, context)
+
+      each(lam(stmt): check-templates(binds, stmt, typ, context) end, stmts)
     end
     | s-user-block(l, body) => block:
       print("s-user-block")
