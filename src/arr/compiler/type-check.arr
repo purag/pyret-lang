@@ -96,7 +96,7 @@ is-s-check-test = A.is-s-check-test
 
 # map srcloc -> type for '...' expressions
 template-type-dict = SD.make-string-dict()
-var purag-debug :: Boolean = false
+var purag-debug :: Boolean = true
 
 ################### Test Inference ####################
 
@@ -310,7 +310,51 @@ fun get-bind-by-id(binds, id):
 end
 
 # TODO(purag)
-fun get-binds-by-typ(binds, typ :: Type):
+fun get-data-bind-by-type(typ :: Type, context :: Context) block:
+  # get the data type
+  datatypes = cases(Option<Type>) context.data-types.get(typ.key()):
+    | some(t) => t
+    | else => nothing
+  end
+  when purag-debug: print(datatypes) end
+  datatypes
+end
+
+# TODO(purag)
+fun get-binds-by-type(typ :: Type, context :: Context) block:
+  # get all the names with type == typ
+  names = filter(lam(tup): tup.{1} == typ end, map(lam(k) block:
+    actualtyp = cases(Option<Type>) context.binds.get(k):
+      | some(t) => t
+      | else => nothing
+    end
+    when purag-debug: print({k; actualtyp}) end
+    {k; actualtyp}
+  end, context.binds.keys().to-list()))
+  when purag-debug: print(names) end
+  names
+end
+
+# TODO(purag)
+fun get-global-binds-by-type(typ :: Type, context :: Context) block:
+  # get all the names with ann == typ
+  global-types = filter(lam(tup): tup.{1} == typ end, map(lam(k) block:
+    actualtyp = cases(Option<Type>) context.global-types.get(k):
+      | some(t) => t
+      | else => nothing
+    end
+    when purag-debug: print({k; actualtyp}) end
+    {k; actualtyp}
+  end, context.global-types.keys().to-list()))
+  when purag-debug: print(global-types) end
+  global-types
+end
+
+# TODO(purag)
+# d is depth of instantiations. most reasonable instantiations will probably have depth < 3-5
+fun enumerate-type-instances(typ :: Type, context :: Context, d :: Number) block:
+  datatype = get-data-bind-by-type(typ, context)
+  names = get-binds-by-type(typ, context)
   true
 end
 
@@ -368,7 +412,11 @@ fun check-templates(e :: Expr, typ :: Type, context :: Context) block:
           print("\n")
         end
 
+        loc = num-to-string(l.start-line) + ":" + num-to-string(l.start-column) + "-" + num-to-string(l.end-column)
+        print("consider replacing your `...` at line " + loc + " with one of the following:")
         # TODO(purag): enumerate some types now
+        enumerate-type-instances(typ, context, 5)
+
       else:
         # TODO(purag): get the annotation for each arg here instead of nothing
         each(lam(arg): check-templates(arg, t-top(A.dummy-loc, false), context) end, args)
@@ -598,11 +646,6 @@ fun check-templates(e :: Expr, typ :: Type, context :: Context) block:
     # | s-get-bang(l, obj, field)
     # | s-bracket(l, obj, key)
   end
-end
-
-# TODO(purag)
-fun enumerate-type-instances(typ, context, n) block:
-  true
 end
 
 fun checking(e, expect-typ, top-level, context) block:
@@ -898,7 +941,7 @@ fun _checking(e :: Expr, expect-type :: Type, top-level :: Boolean, context :: C
           check-synthesis(e, expect-type, top-level, context)
         | s-prim-app(l, _fun, args) => block:
           result = check-synthesis(e, expect-type, top-level, context)
-          when (_fun == "throwUnfinishedTemplate") block:
+          when (_fun == "throwUnfinishedTemplate") and purag-debug block:
             print(l)
             print("template should have type")
             print(result)
@@ -1171,8 +1214,10 @@ fun _synthesis(e :: Expr, top-level :: Boolean, context :: Context) -> TypingRes
         end)
     | s-prim-app(l, _fun, args) =>
       lookup-id(l, _fun, e, context).typing-bind(lam(arrow-type, shadow context) block:
-        print(_fun)
-        print(arrow-type)
+        when purag-debug block:
+          print(_fun)
+          print(arrow-type)
+        end
         result = synthesis-spine(arrow-type, A.s-prim-app(l, _fun, _), args, l, context)
           .map-type(_.set-loc(l))
         when purag-debug block:
