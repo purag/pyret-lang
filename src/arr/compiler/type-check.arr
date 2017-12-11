@@ -94,6 +94,9 @@ string-dict = SD.string-dict
 
 is-s-check-test = A.is-s-check-test
 
+# map srcloc -> type for '...' expressions
+template-type-dict = SD.make-string-dict()
+
 ################### Test Inference ####################
 
 # an option containing the key of the function name,
@@ -271,8 +274,15 @@ fun type-check(program :: A.Program, compile-env :: C.CompileEnvironment, module
 
           folded-info = gather-provides(_provide, context)
           cases(FoldResult<TCInfo>) folded-info:
-            | fold-result(info, _) =>
+            | fold-result(info, _) => block:
+
+              # TODO(purag): enumerate some types
+              # maybe use instantiate-data-type or whatever
+              check-templates([list: ], new-body, t-top(l, false))
+
               C.ok(TCS.typed(A.s-program(l, _provide, provided-types, imports, new-body), info))
+
+            end
             | fold-errors(errs) =>
               C.err(errs)
           end
@@ -280,6 +290,215 @@ fun type-check(program :: A.Program, compile-env :: C.CompileEnvironment, module
           C.err(error-list)
       end
   end
+end
+
+# TODO(purag)
+fun check-templates(binds, e :: Expr, typ :: Type):
+  cases(Expr) e:
+
+    # the golden nuggets
+    | s-app(l, _fun, args) => block:
+      if (_fun == "throwUnfinishedTemplate") and not(is-nothing(typ)) block:
+        print("type at")
+        print(l)
+        print("should be")
+        print(typ)
+        print("\n")
+      else:
+        # TODO(purag): get the annotation for each arg here instead of nothing
+        each(lam(arg): check-templates(binds, arg, nothing) end, args)
+      end
+    end
+    | s-app-enriched(l, _fun, args, app-info) => block:
+      if (_fun == "throwUnfinishedTemplate") and not(is-nothing(typ)) block:
+        print("type at")
+        print(l)
+        print("should be")
+        print(typ)
+        print("\n")
+      else:
+        # TODO(purag): get the annotation for each arg here instead of nothing
+        each(lam(arg): check-templates(binds, arg, nothing) end, args)
+      end
+    end
+    | s-prim-app(l, _fun, args) => block:
+      if (_fun == "throwUnfinishedTemplate") and not(is-nothing(typ)) block:
+        print("type at")
+        print(l)
+        print("should be")
+        print(typ)
+        print("\n")
+      else:
+        # TODO(purag): get the annotation for each arg here instead of nothing
+        each(lam(arg): check-templates(binds, arg, nothing) end, args)
+      end
+    end
+
+    # recurse on the bodies of other blocks
+    | s-type-let-expr(l, shadow binds, body, blocky) => block:
+      print("s-type-let-expr")
+      check-templates(binds, body, typ)
+    end
+    | s-let-expr(l, shadow binds, body, blocky) => block:
+      print("s-let-expr")
+      check-templates(binds, body, typ)
+    end
+    | s-letrec(l, shadow binds, body, blocky) => block:
+      print("s-letrec")
+      check-templates(binds, body, typ)
+    end
+    | s-block(l, stmts) => block:
+      print("s-block")
+      each(lam(stmt): check-templates(binds, stmt, nothing) end, stmts)
+      check-templates(binds, stmts.last(), typ)
+    end
+    | s-user-block(l, body) => block:
+      print("s-user-block")
+      check-templates(binds, body, typ)
+    end
+    | s-fun(l, name, params, args, ann, doc, body, _check-loc, _check, blocky) => block:
+      print("found a function with ann = ")
+      print(ann)
+      check-templates(binds, body, ann)
+    end
+    | s-when(l, test, block, blocky) => block:
+      print("s-when")
+      check-templates(binds, block, typ)
+    end
+
+    | s-if-pipe(l, branches, blocky) => block:
+      print("s-if-pipe")
+      each(lam(b) block:
+        check-templates(binds, b.test, t-boolean(A.dummy-loc))
+        check-templates(binds, b.body, typ)
+      end, branches)
+    end
+    | s-if-pipe-else(l, branches, _else, blocky) => block:
+      print("s-if-pipe-else")
+      each(lam(b) block:
+        check-templates(binds, b.test, t-boolean(A.dummy-loc))
+        check-templates(binds, b.body, typ)
+      end, branches)
+    end
+    | s-if(l, branches, blocky) => block:
+      print("s-if")
+      each(lam(b) block:
+        check-templates(binds, b.test, t-boolean(A.dummy-loc))
+        check-templates(binds, b.body, typ)
+      end, branches)
+    end
+    | s-if-else(l, branches, _else, blocky) => block:
+      print("s-if-else")
+      each(lam(b) block:
+        check-templates(binds, b.test, t-boolean(A.dummy-loc))
+        check-templates(binds, b.body, typ)
+      end, branches)
+      check-templates(binds, _else, typ)
+    end
+    | s-cases(l, matchtyp, val, branches, blocky) => block:
+      print("s-cases")
+      each(lam(b): check-templates(binds, b.body, typ) end, branches)
+    end
+    | s-cases-else(l, matchtyp, val, branches, _else, blocky) => block:
+      print("s-cases-else")
+      each(lam(b): check-templates(binds, b.body, typ) end, branches)
+    end
+
+    | s-lam(l, name, params, args, ann, doc, body, _check-loc, _check, blocky) => block:
+      print("s-lam")
+      check-templates(binds, body, typ)
+    end
+    | s-method(l, name, params, args, ann, doc, body, _check-loc, _check, blocky) => block:
+      print("s-method")
+      check-templates(binds, body, typ)
+    end
+    | s-for(l, iterator, bindings, ann, body, blocky) => block:
+      print("s-for")
+      check-templates(binds, body, typ)
+    end
+    | s-paren(l, expr) => block:
+      print("s-paren")
+      check-templates(binds, expr, typ)
+    end
+    | s-assign(l, id, value) => block:
+      print("s-assign")
+      # TODO(purag): actually get the type of this ID
+      check-templates(binds, value, typ)
+    end
+    | s-op(l, op-l, op, left, right) => block:
+      print("s-op")
+      check-templates(binds, left, typ)
+      check-templates(binds, left, typ)
+    end
+    | s-var(l, name, value) => block:
+      print("s-var")
+      check-templates(binds, value, nothing)
+    end
+    | s-rec(l, name, value) => block:
+      print("s-rec")
+      check-templates(binds, value, nothing)
+    end
+    | s-let(l, name, value, keyword-val) => block:
+      print("s-let")
+      check-templates(binds, value, nothing)
+    end
+
+    | s-data(l, name, params, mixins, variants, shared-members, _check-loc) => block:
+      print("s-data")
+      
+    end
+    | s-data-expr(l, name, namet, params, mixins, variants, shared-members, _check-loc, _check) => block:
+      print("s-data-expr")
+
+    end
+
+    | else => block:
+      print("in the else case")
+      nothing
+    end
+
+    # TODO(purag): implement recursing on those of the following that have expr
+    #   or value (basically, another Expr)
+    #
+    # | s-module(l, answer, defined-values, defined-types, provided-values, provided-types, checks)
+    # | s-template(l)
+    # | s-hint-exp(l, hints, exp)
+    # | s-instantiate(l, expr, params)
+    # | s-type(l, name, params, ann)
+    # | s-newtype(l, name, namet)
+    # | s-ref(l, ann)
+    # | s-contract(l, name, ann)
+    # | s-check-test(l, op, refinement, left, right)
+    # | s-check-expr(l, expr, ann)
+    # | s-extend(l, supe, fields)
+    # | s-update(l, supe, fields)
+    # | s-tuple(l, fields)
+    # | s-tuple-get(l, tup, index, index-loc)
+    # | s-obj(l, fields)
+    # | s-array(l, values)
+    # | s-construct(l, modifier, constructor, values)
+    # | s-prim-val(l, name)
+    # | s-id(l, id)
+    # | s-id-var(l, id)
+    # | s-id-letrec(l, id, safe)
+    # | s-undefined(l)
+    # | s-srcloc(l, loc)
+    # | s-num(l, n)
+    # | s-frac(l, num, den)
+    # | s-rfrac(l, num, den)
+    # | s-bool(l, b)
+    # | s-str(l, s)
+    # | s-dot(l, obj, field)
+    # | s-get-bang(l, obj, field)
+    # | s-bracket(l, obj, key)
+    # | s-data(l, name, params, mixins, variants, shared-members, _check-loc)
+    # | s-data-expr(l, name, namet, params, mixins, variants, shared-members, _check-loc, _check)
+  end
+end
+
+# TODO(purag)
+fun enumerate-type-instances(typ, context, n) block:
+  true
 end
 
 fun checking(e, expect-typ, top-level, context) block:
@@ -295,6 +514,19 @@ fun checking(e, expect-typ, top-level, context) block:
   # print(result)
   # print("\n    )")
   # result
+
+  # when (A.is-s-prim-app(e)) and (e._fun == "throwUnfinishedTemplate") block:
+  #   print("\n\n")
+  #   print("... at ")
+  #   print(torepr(e.l))
+  #   print(" expect ")
+  #   print(expect-typ)
+  #   print(" has type ")
+  #   print(_checking(e, expect-typ, top-level, context).typ)
+  #   print(" insert-bst has type ")
+  #   print(context.binds)
+  # end
+
   _checking(e, expect-typ, top-level, context)
 end
 
@@ -363,8 +595,16 @@ fun _checking(e :: Expr, expect-type :: Type, top-level :: Boolean, context :: C
                 end)
               end)
             end)
-        | s-template(l) =>
+        | s-template(l) => block:
+
+          # print("location ")
+          # print(l)
+          # print(": type is ")
+          # print(typing-result(e, expect-type, context).solve-bind().typ)
+          # print("\n\n")
+
           typing-result(e, expect-type, context)
+          end
         | s-type-let-expr(l, binds, body, blocky) =>
           handle-type-let-binds(binds, context).typing-bind(lam(_, shadow context):
             checking(body, expect-type, true, context)
@@ -608,6 +848,15 @@ fun synthesis(e, top-level, context) block:
   # print(result)
   # print("\n    )")
   # result
+
+  # when (A.is-s-prim-app(e)) and (e._fun == "throwUnfinishedTemplate") block:
+  #   print("\n\n")
+  #   print("... at ")
+  #   print(torepr(e.l))
+  #   print(" has synthesized type ")
+  #   print(_synthesis(e, top-level, context).typ)
+  # end
+
   _synthesis(e, top-level, context)
 end
 
@@ -618,10 +867,18 @@ fun _synthesis(e :: Expr, top-level :: Boolean, context :: Context) -> TypingRes
       synthesis(answer, false, context)
         .map-expr(A.s-module(l, _, defined-values, defined-types, provided-values, provided-types, checks))
         .map-type(_.set-loc(l))
-    | s-template(l) =>
+    | s-template(l) => block:
       new-exists = new-existential(l, false)
       shadow context = context.add-variable(new-exists)
+
+      # print("location ")
+      # print(l)
+      # print(": type is ")
+      # print(typing-result(e, new-exists, context).solve-bind())
+      # print("\n\n")
+
       typing-result(e, new-exists, context)
+      end
     | s-type-let-expr(l, binds, body, b) =>
       handle-type-let-binds(binds, context).typing-bind(lam(_, shadow context):
         synthesis(body, false, context)
