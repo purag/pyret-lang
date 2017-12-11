@@ -12,6 +12,8 @@ import file("type-structs.arr") as TS
 import file("type-check-structs.arr") as TCS
 import file("compile-structs.arr") as C
 
+import lists as L
+
 type Type = TS.Type
 type TypeMembers = TS.TypeMembers
 type ConstraintSolution = TCS.ConstraintSolution
@@ -96,7 +98,7 @@ is-s-check-test = A.is-s-check-test
 
 # map srcloc -> type for '...' expressions
 template-type-dict = SD.make-string-dict()
-var purag-debug :: Boolean = true
+var purag-debug :: Boolean = false
 
 ################### Test Inference ####################
 
@@ -322,17 +324,27 @@ end
 
 # TODO(purag)
 fun get-binds-by-type(typ :: Type, context :: Context) block:
-  # get all the names with type == typ
-  names = filter(lam(tup): tup.{1} == typ end, map(lam(k) block:
+  # get all the binds with type == typ
+  binds = filter(lam(tup): tup.{1} == typ end, map(lam(k) block:
     actualtyp = cases(Option<Type>) context.binds.get(k):
       | some(t) => t
       | else => nothing
     end
-    when purag-debug: print({k; actualtyp}) end
-    {k; actualtyp}
+    firsthash = string-index-of(k, "#") + 1
+    secondhash = firsthash + string-index-of(string-substring(k, firsthash, string-length(k)), "#")
+    actualname = string-substring(k, firsthash, secondhash)
+    # actualname = cases(Name)
+    #   | s-name(_, s) => s
+    #   | s-global(s) => s
+    #   | s-type-global(s) => s
+    #   | s-atom(base, _) => base
+    #   | else => to-string(k)
+    # end
+    when purag-debug: print({actualname; actualtyp}) end
+    {actualname; actualtyp}
   end, context.binds.keys().to-list()))
-  when purag-debug: print(names) end
-  names
+  when purag-debug: print(binds) end
+  binds
 end
 
 # TODO(purag)
@@ -354,7 +366,23 @@ end
 # d is depth of instantiations. most reasonable instantiations will probably have depth < 3-5
 fun enumerate-type-instances(typ :: Type, context :: Context, d :: Number) block:
   datatype = get-data-bind-by-type(typ, context)
-  names = get-binds-by-type(typ, context)
+  map(lam(variant):
+    cases(TS.TypeVariant) variant:
+      | t-variant(name, fields, with-fields, l) => block:
+        fieldstr = L.fold_n(lam(index, rest, field):
+          # TODO(purag): enumerate type instances for arguments to ctors
+          shadow binds = get-binds-by-type(field.{1}, context)
+
+          rest + if index == 0: "..." else: ", ..." end
+        end, 0, "", fields)
+        print(name + "(" + fieldstr + ")")
+      end
+      | t-singleton-variant(name, with-fields, l) => print(name)
+    end
+  end, datatype.variants)
+
+  binds = get-binds-by-type(typ, context)
+  map(lam(shadow bind): print(bind.{0}) end, binds)
   true
 end
 
