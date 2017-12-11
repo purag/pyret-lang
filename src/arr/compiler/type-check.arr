@@ -96,6 +96,7 @@ is-s-check-test = A.is-s-check-test
 
 # map srcloc -> type for '...' expressions
 template-type-dict = SD.make-string-dict()
+var purag-debug :: Boolean = false
 
 ################### Test Inference ####################
 
@@ -278,7 +279,7 @@ fun type-check(program :: A.Program, compile-env :: C.CompileEnvironment, module
 
               # TODO(purag): enumerate some types
               # maybe use instantiate-data-type or whatever
-              check-templates([list: ], new-body, t-top(l, false), context)
+              check-templates(new-body, t-top(l, false), context)
 
               C.ok(TCS.typed(A.s-program(l, _provide, provided-types, imports, new-body), info))
 
@@ -309,238 +310,259 @@ fun get-bind-by-id(binds, id):
 end
 
 # TODO(purag)
-fun check-templates(binds, e :: Expr, typ :: Type, context :: Context):
+fun get-binds-by-typ(binds, typ :: Type):
+  true
+end
+
+# TODO(purag)
+fun check-templates(e :: Expr, typ :: Type, context :: Context) block:
+  # shadow context = context.add-level()
   cases(Expr) e:
 
     # the golden nuggets
     | s-app(l, _fun, args) => block:
-      print("s-app")
+      when purag-debug: print("s-app") end
       if (_fun == "throwUnfinishedTemplate") and not(is-nothing(typ)) block:
-        print("\n")
-        print("type at")
-        print(l)
-        print("should be")
-        print(typ)
-        print("\n")
+        when purag-debug block:
+          print("\n")
+          print("type at")
+          print(l)
+          print("should be")
+          print(typ)
+          print("\n")
+        end
       else:
         # TODO(purag): get the annotation for each arg here instead of nothing
-        # each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false), context) end, args)
+        # each(lam(arg): check-templates(arg, t-top(A.dummy-loc, false), context) end, args)
 
         # TODO(purag): bad hack. for throwUnfinishedTemplate, the above wasn't
         # propagating the type correctly
-        each(lam(arg): check-templates(binds, arg, typ, context) end, args)
+        each(lam(arg): check-templates(arg, typ, context) end, args)
       end
     end
     | s-app-enriched(l, _fun, args, app-info) => block:
       print("s-app-enriched")
       if (_fun == "throwUnfinishedTemplate") and not(is-nothing(typ)) block:
-        print("\n")
-        print("type at")
-        print(l)
-        print("should be")
-        print(typ)
-        print("\n")
+        when purag-debug block:
+          print("\n")
+          print("type at")
+          print(l)
+          print("should be")
+          print(typ)
+          print("\n")
+        end
       else:
         # TODO(purag): get the annotation for each arg here instead of nothing
-        each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false), context) end, args)
+        each(lam(arg): check-templates(arg, t-top(A.dummy-loc, false), context) end, args)
       end
     end
     | s-prim-app(l, _fun, args) => block:
-      print("s-prim-app")
+      when purag-debug: print("s-prim-app") end
       if (_fun == "throwUnfinishedTemplate") and not(is-nothing(typ)) block:
-        print("\n")
-        print("type at")
-        print(l)
-        print("should be")
-        print(typ)
-        print("\n")
+        when purag-debug block:
+          print("\n")
+          print("type at")
+          print(l)
+          print("should be")
+          print(typ)
+          print("\n")
+        end
+
+        # TODO(purag): enumerate some types now
       else:
         # TODO(purag): get the annotation for each arg here instead of nothing
-        each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false), context) end, args)
+        each(lam(arg): check-templates(arg, t-top(A.dummy-loc, false), context) end, args)
       end
     end
 
     # recurse on the bodies of other blocks
     | s-type-let-expr(l, type-let-binds, body, blocky) => block:
-      print("s-type-let-expr")
-      check-templates(binds + type-let-binds, body, typ, context)
+      when purag-debug: print("s-type-let-expr") end
+      check-templates(body, typ, context)
     end
     | s-let-expr(l, let-binds, body, blocky) => block:
-      print("s-let-expr")
-      check-templates(binds + let-binds, body, typ, context)
+      when purag-debug: print("s-let-expr") end
+      check-templates(body, typ, context)
     end
     | s-letrec(l, letrec-binds, body, blocky) => block:
-      print("s-letrec")
+      when purag-debug: print("s-letrec") end
       each(lam(shadow bind) block:
-        check-templates(binds + letrec-binds, bind.value, typ, context)
+        check-templates(bind.value, typ, context)
       end, letrec-binds)
-      check-templates(binds + letrec-binds, body, typ, context)
+      check-templates(body, typ, context)
     end
     | s-block(l, stmts) => block:
-      print("s-block")
+      when purag-debug: print("s-block") end
       # TODO(purag): do I really need to use t-top here?
-      # each(lam(stmt): check-templates(binds, stmt, t-top(A.dummy-loc, false), context) end, stmts)
-      # check-templates(binds, stmts.last(), typ, context)
+      # each(lam(stmt): check-templates(stmt, t-top(A.dummy-loc, false), context) end, stmts)
+      # check-templates(stmts.last(), typ, context)
 
-      each(lam(stmt): check-templates(binds, stmt, typ, context) end, stmts)
+      each(lam(stmt): check-templates(stmt, typ, context) end, stmts)
     end
     | s-user-block(l, body) => block:
-      print("s-user-block")
-      check-templates(binds, body, typ, context)
+      when purag-debug: print("s-user-block") end
+      check-templates(body, typ, context)
     end
     | s-fun(l, name, params, args, ann, doc, body, _check-loc, _check, blocky) => block:
-      print("found a function with ann = ")
-      print(ann)
+      when purag-debug block:
+        print("s-fun")
+        print("found a function with ann = ")
+        print(ann)
+      end
       shadow typ = to-type(ann, context).bind(lam(maybe-type, shadow context):
         cases(Option<Type>) maybe-type:
           | none => fold-result(t-top(A.dummy-loc, false), context)
           | some(shadow typ) => fold-result(typ, context)
         end
       end).v
-      check-templates(binds, body, typ, context)
+      check-templates(body, typ, context)
     end
     | s-when(l, test, block, blocky) => block:
-      print("s-when")
-      check-templates(binds, block, typ, context)
+      when purag-debug: print("s-when") end
+      check-templates(block, typ, context)
     end
 
     | s-if-pipe(l, branches, blocky) => block:
-      print("s-if-pipe")
+      when purag-debug: print("s-if-pipe") end
       each(lam(b) block:
-        check-templates(binds, b.test, t-boolean(A.dummy-loc), context)
-        check-templates(binds, b.body, typ, context)
+        check-templates(b.test, t-boolean(A.dummy-loc), context)
+        check-templates(b.body, typ, context)
       end, branches)
     end
     | s-if-pipe-else(l, branches, _else, blocky) => block:
-      print("s-if-pipe-else")
+      when purag-debug: print("s-if-pipe-else") end
       each(lam(b) block:
-        check-templates(binds, b.test, t-boolean(A.dummy-loc), context)
-        check-templates(binds, b.body, typ, context)
+        check-templates(b.test, t-boolean(A.dummy-loc), context)
+        check-templates(b.body, typ, context)
       end, branches)
     end
     | s-if(l, branches, blocky) => block:
-      print("s-if")
+      when purag-debug: print("s-if") end
       each(lam(b) block:
-        check-templates(binds, b.test, t-boolean(A.dummy-loc), context)
-        check-templates(binds, b.body, typ, context)
+        check-templates(b.test, t-boolean(A.dummy-loc), context)
+        check-templates(b.body, typ, context)
       end, branches)
     end
     | s-if-else(l, branches, _else, blocky) => block:
-      print("s-if-else")
+      when purag-debug: print("s-if-else") end
       each(lam(b) block:
-        check-templates(binds, b.test, t-boolean(A.dummy-loc), context)
-        check-templates(binds, b.body, typ, context)
+        check-templates(b.test, t-boolean(A.dummy-loc), context)
+        check-templates(b.body, typ, context)
       end, branches)
-      check-templates(binds, _else, typ, context)
+      check-templates(_else, typ, context)
     end
     | s-cases(l, matchtyp, val, branches, blocky) => block:
-      print("s-cases")
-      each(lam(b): check-templates(binds, b.body, typ, context) end, branches)
+      when purag-debug: print("s-cases") end
+      each(lam(b): check-templates(b.body, typ, context) end, branches)
     end
     | s-cases-else(l, matchtyp, val, branches, _else, blocky) => block:
-      print("s-cases-else")
-      each(lam(b): check-templates(binds, b.body, typ, context) end, branches)
+      when purag-debug: print("s-cases-else") end
+      each(lam(b): check-templates(b.body, typ, context) end, branches)
     end
 
     | s-lam(l, name, params, args, ann, doc, body, _check-loc, _check, blocky) => block:
-      print("s-lam")
-      print(ann)
-      print(typ)
+      when purag-debug block:
+        print("s-lam")
+        print(ann)
+        print(typ)
+      end
       lamtyp = to-type(ann, context).bind(lam(maybe-type, shadow context):
         cases(Option<Type>) maybe-type:
           | none => fold-result(t-top(A.dummy-loc, false), context)
           | some(shadow typ) => block:
-            print(typ)
+            when purag-debug: print(typ) end
             fold-result(typ, context)
           end
         end
       end).v
-      print("\nfunction")
-      print(name)
-      print("returns")
-      print(if TS.is-t-top(lamtyp): typ else: lamtyp end)
-      print("\n")
+      when purag-debug block:
+        print("\nfunction")
+        print(name)
+        print("returns")
+        print(if TS.is-t-top(lamtyp): typ else: lamtyp end)
+        print("\n")
+      end
       # hack: use the propagated type if the lam type is Any
-      check-templates(binds, body, if TS.is-t-top(lamtyp): typ else: lamtyp end, context)
+      check-templates(body, if TS.is-t-top(lamtyp): typ else: lamtyp end, context)
     end
     | s-method(l, name, params, args, ann, doc, body, _check-loc, _check, blocky) => block:
-      print("s-method")
-      print(ann)
+      when purag-debug: print("s-method") end
+      when purag-debug: print(ann) end
       shadow typ = to-type(ann, context).bind(lam(maybe-type, shadow context):
         cases(Option<Type>) maybe-type:
           | none => fold-result(t-top(A.dummy-loc, false), context)
           | some(shadow typ) => fold-result(typ, context)
         end
       end).v
-      check-templates(binds, body, typ, context)
+      check-templates(body, typ, context)
     end
     | s-for(l, iterator, bindings, ann, body, blocky) => block:
-      print("s-for")
-      check-templates(binds, body, typ, context)
+      when purag-debug: print("s-for") end
+      check-templates(body, typ, context)
     end
     | s-paren(l, expr) => block:
-      print("s-paren")
-      check-templates(binds, expr, typ, context)
+      when purag-debug: print("s-paren") end
+      check-templates(expr, typ, context)
     end
     | s-assign(l, id, value) => block:
-      print("s-assign")
+      when purag-debug: print("s-assign") end
       # TODO(purag): actually get the type of this ID
-      check-templates(binds, value, typ, context)
+      check-templates(value, typ, context)
     end
     | s-op(l, op-l, op, left, right) => block:
-      print("s-op")
-      check-templates(binds, left, typ, context)
-      check-templates(binds, left, typ, context)
+      when purag-debug: print("s-op") end
+      check-templates(left, typ, context)
+      check-templates(left, typ, context)
     end
     | s-var(l, name, value) => block:
-      print("s-var")
-      check-templates(binds, value, typ, context)
+      when purag-debug: print("s-var") end
+      check-templates(value, typ, context)
     end
     | s-rec(l, name, value) => block:
-      print("s-rec")
-      check-templates(binds, value, typ, context)
+      when purag-debug: print("s-rec") end
+      check-templates(value, typ, context)
     end
     | s-let(l, name, value, keyword-val) => block:
-      print("s-let")
-      check-templates(binds, value, typ, context)
+      when purag-debug: print("s-let") end
+      check-templates(value, typ, context)
     end
 
     | s-data(l, name, params, mixins, variants, shared-members, _check-loc) => block:
-      print("s-data")
+      when purag-debug: print("s-data") end
       
     end
     | s-data-expr(l, name, namet, params, mixins, variants, shared-members, _check-loc, _check) => block:
-      print("s-data-expr")
+      when purag-debug: print("s-data-expr") end
 
     end
     | s-module(l, answer, defined-values, defined-types, provided-values, provided-types, checks) => block:
-      print("s-module")
-      check-templates(binds, answer, typ, context)
-      each(lam(val): check-templates(binds, val.value, typ, context) end, defined-values)
-      check-templates(binds, provided-values, typ, context)
+      when purag-debug: print("s-module") end
+      check-templates(answer, typ, context)
+      each(lam(val): check-templates(val.value, typ, context) end, defined-values)
+      check-templates(provided-values, typ, context)
     end
 
     | s-obj(l, fields) => block:
-      print("s-obj")
+      when purag-debug: print("s-obj") end
       each(lam(field) block:
         cases(A.Member) field:
-          | s-data-field(shadow l, name, value) => check-templates(binds, value, typ, context)
+          | s-data-field(shadow l, name, value) => check-templates(value, typ, context)
           | else => block:
-            print(field.ann)
+            when purag-debug: print(field.ann) end
             shadow typ = to-type(field.ann, context).bind(lam(maybe-type, shadow context):
               cases(Option<Type>) maybe-type:
                 | none => fold-result(t-top(A.dummy-loc, false), context)
                 | some(shadow typ) => fold-result(typ, context)
               end
             end).v
-            check-templates(binds, field.value, typ, context)
+            check-templates(field.value, typ, context)
           end
         end
       end, fields)
     end
 
     | else => block:
-      print(e)
+      when purag-debug: print(e) end
       nothing
     end
 
@@ -874,8 +896,16 @@ fun _checking(e :: Expr, expect-type :: Type, top-level :: Boolean, context :: C
           raise("checking for s-construct not implemented")
         | s-app(l, _fun, args) =>
           check-synthesis(e, expect-type, top-level, context)
-        | s-prim-app(l, _fun, args) =>
-          check-synthesis(e, expect-type, top-level, context)
+        | s-prim-app(l, _fun, args) => block:
+          result = check-synthesis(e, expect-type, top-level, context)
+          when (_fun == "throwUnfinishedTemplate") block:
+            print(l)
+            print("template should have type")
+            print(result)
+            print("\n")
+          end
+          result
+        end
         | s-prim-val(l, name) =>
           raise("checking for s-prim-val not implemented")
         | s-id(l, id) =>
@@ -1140,9 +1170,17 @@ fun _synthesis(e :: Expr, top-level :: Boolean, context :: Context) -> TypingRes
           synthesis-spine(fun-type, A.s-app(l, _fun, _), args, l, context)
         end)
     | s-prim-app(l, _fun, args) =>
-      lookup-id(l, _fun, e, context).typing-bind(lam(arrow-type, shadow context):
-        synthesis-spine(arrow-type, A.s-prim-app(l, _fun, _), args, l, context)
+      lookup-id(l, _fun, e, context).typing-bind(lam(arrow-type, shadow context) block:
+        print(_fun)
+        print(arrow-type)
+        result = synthesis-spine(arrow-type, A.s-prim-app(l, _fun, _), args, l, context)
           .map-type(_.set-loc(l))
+        when purag-debug block:
+          print("synthesizes to")
+          print(result.typ)
+          print("\n")
+        end
+        result
       end)
     | s-prim-val(l, name) =>
       raise("synthesis for s-prim-val not implemented")
@@ -1261,7 +1299,7 @@ fun synthesis-spine(fun-type :: Type, recreate :: (List<Expr> -> Expr), args :: 
 end
 
 fun check-synthesis(e :: Expr, expect-type :: Type, top-level :: Boolean, context :: Context) -> TypingResult:
-  synthesis(e, top-level, context).bind(lam(new-expr, new-type, shadow context):
+  synthesis(e, top-level, context).bind(lam(new-expr, new-type, shadow context) block:
     # TODO(MATT): decide whether this should return new-type or expect-type
     typing-result(new-expr, new-type, context.add-constraint(new-type, expect-type))
   end)
