@@ -306,7 +306,7 @@ fun check-templates(binds, e :: Expr, typ :: Type):
         print("\n")
       else:
         # TODO(purag): get the annotation for each arg here instead of nothing
-        each(lam(arg): check-templates(binds, arg, nothing) end, args)
+        each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false)) end, args)
       end
     end
     | s-app-enriched(l, _fun, args, app-info) => block:
@@ -318,7 +318,7 @@ fun check-templates(binds, e :: Expr, typ :: Type):
         print("\n")
       else:
         # TODO(purag): get the annotation for each arg here instead of nothing
-        each(lam(arg): check-templates(binds, arg, nothing) end, args)
+        each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false)) end, args)
       end
     end
     | s-prim-app(l, _fun, args) => block:
@@ -330,7 +330,7 @@ fun check-templates(binds, e :: Expr, typ :: Type):
         print("\n")
       else:
         # TODO(purag): get the annotation for each arg here instead of nothing
-        each(lam(arg): check-templates(binds, arg, nothing) end, args)
+        each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false)) end, args)
       end
     end
 
@@ -349,7 +349,7 @@ fun check-templates(binds, e :: Expr, typ :: Type):
     end
     | s-block(l, stmts) => block:
       print("s-block")
-      each(lam(stmt): check-templates(binds, stmt, nothing) end, stmts)
+      each(lam(stmt): check-templates(binds, stmt, t-top(A.dummy-loc, false)) end, stmts)
       check-templates(binds, stmts.last(), typ)
     end
     | s-user-block(l, body) => block:
@@ -432,15 +432,15 @@ fun check-templates(binds, e :: Expr, typ :: Type):
     end
     | s-var(l, name, value) => block:
       print("s-var")
-      check-templates(binds, value, nothing)
+      check-templates(binds, value, t-top(A.dummy-loc, false))
     end
     | s-rec(l, name, value) => block:
       print("s-rec")
-      check-templates(binds, value, nothing)
+      check-templates(binds, value, t-top(A.dummy-loc, false))
     end
     | s-let(l, name, value, keyword-val) => block:
       print("s-let")
-      check-templates(binds, value, nothing)
+      check-templates(binds, value, t-top(A.dummy-loc, false))
     end
 
     | s-data(l, name, params, mixins, variants, shared-members, _check-loc) => block:
@@ -451,16 +451,31 @@ fun check-templates(binds, e :: Expr, typ :: Type):
       print("s-data-expr")
 
     end
+    | s-module(l, answer, defined-values, defined-types, provided-values, provided-types, checks) => block:
+      print("s-module")
+      check-templates(binds, answer, typ)
+      each(lam(val): check-templates(binds, val.value, typ) end, defined-values)
+      check-templates(binds, provided-values, typ)
+    end
+
+    | s-obj(l, fields) => block:
+      print("s-obj")
+      each(lam(field) block:
+        cases(A.Member) field:
+          | s-data-field(shadow l, name, value) => check-templates(binds, value, typ)
+          | else => check-templates(binds, field.value, field.ann)
+        end
+      end, fields)
+    end
 
     | else => block:
-      print("in the else case")
+      print(e)
       nothing
     end
 
     # TODO(purag): implement recursing on those of the following that have expr
     #   or value (basically, another Expr)
     #
-    # | s-module(l, answer, defined-values, defined-types, provided-values, provided-types, checks)
     # | s-template(l)
     # | s-hint-exp(l, hints, exp)
     # | s-instantiate(l, expr, params)
@@ -474,7 +489,6 @@ fun check-templates(binds, e :: Expr, typ :: Type):
     # | s-update(l, supe, fields)
     # | s-tuple(l, fields)
     # | s-tuple-get(l, tup, index, index-loc)
-    # | s-obj(l, fields)
     # | s-array(l, values)
     # | s-construct(l, modifier, constructor, values)
     # | s-prim-val(l, name)
@@ -491,8 +505,6 @@ fun check-templates(binds, e :: Expr, typ :: Type):
     # | s-dot(l, obj, field)
     # | s-get-bang(l, obj, field)
     # | s-bracket(l, obj, key)
-    # | s-data(l, name, params, mixins, variants, shared-members, _check-loc)
-    # | s-data-expr(l, name, namet, params, mixins, variants, shared-members, _check-loc, _check)
   end
 end
 
