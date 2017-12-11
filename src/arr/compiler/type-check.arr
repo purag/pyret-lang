@@ -278,7 +278,7 @@ fun type-check(program :: A.Program, compile-env :: C.CompileEnvironment, module
 
               # TODO(purag): enumerate some types
               # maybe use instantiate-data-type or whatever
-              check-templates([list: ], new-body, t-top(l, false))
+              check-templates([list: ], new-body, t-top(l, false), context)
 
               C.ok(TCS.typed(A.s-program(l, _provide, provided-types, imports, new-body), info))
 
@@ -293,12 +293,17 @@ fun type-check(program :: A.Program, compile-env :: C.CompileEnvironment, module
 end
 
 # TODO(purag)
-fun check-templates(binds, e :: Expr, typ :: Type):
+# fun get-bind-by-id(binds, id):
+
+# TODO(purag)
+fun check-templates(binds, e :: Expr, typ :: Type, context :: Context):
   cases(Expr) e:
 
     # the golden nuggets
     | s-app(l, _fun, args) => block:
+      print("s-app")
       if (_fun == "throwUnfinishedTemplate") and not(is-nothing(typ)) block:
+        print("\n")
         print("type at")
         print(l)
         print("should be")
@@ -306,11 +311,13 @@ fun check-templates(binds, e :: Expr, typ :: Type):
         print("\n")
       else:
         # TODO(purag): get the annotation for each arg here instead of nothing
-        each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false)) end, args)
+        each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false), context) end, args)
       end
     end
     | s-app-enriched(l, _fun, args, app-info) => block:
+      print("s-app-enriched")
       if (_fun == "throwUnfinishedTemplate") and not(is-nothing(typ)) block:
+        print("\n")
         print("type at")
         print(l)
         print("should be")
@@ -318,11 +325,13 @@ fun check-templates(binds, e :: Expr, typ :: Type):
         print("\n")
       else:
         # TODO(purag): get the annotation for each arg here instead of nothing
-        each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false)) end, args)
+        each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false), context) end, args)
       end
     end
     | s-prim-app(l, _fun, args) => block:
+      print("s-prim-app")
       if (_fun == "throwUnfinishedTemplate") and not(is-nothing(typ)) block:
+        print("\n")
         print("type at")
         print(l)
         print("should be")
@@ -330,117 +339,151 @@ fun check-templates(binds, e :: Expr, typ :: Type):
         print("\n")
       else:
         # TODO(purag): get the annotation for each arg here instead of nothing
-        each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false)) end, args)
+        each(lam(arg): check-templates(binds, arg, t-top(A.dummy-loc, false), context) end, args)
       end
     end
 
     # recurse on the bodies of other blocks
-    | s-type-let-expr(l, shadow binds, body, blocky) => block:
+    | s-type-let-expr(l, type-let-binds, body, blocky) => block:
       print("s-type-let-expr")
-      check-templates(binds, body, typ)
+      check-templates(binds + type-let-binds, body, typ, context)
     end
-    | s-let-expr(l, shadow binds, body, blocky) => block:
+    | s-let-expr(l, let-binds, body, blocky) => block:
       print("s-let-expr")
-      check-templates(binds, body, typ)
+      check-templates(binds + let-binds, body, typ, context)
     end
-    | s-letrec(l, shadow binds, body, blocky) => block:
+    | s-letrec(l, letrec-binds, body, blocky) => block:
       print("s-letrec")
-      check-templates(binds, body, typ)
+      each(lam(shadow bind) block:
+        check-templates(binds + letrec-binds, bind.value, typ, context)
+      end, letrec-binds)
+      check-templates(binds + letrec-binds, body, typ, context)
     end
     | s-block(l, stmts) => block:
       print("s-block")
-      each(lam(stmt): check-templates(binds, stmt, t-top(A.dummy-loc, false)) end, stmts)
-      check-templates(binds, stmts.last(), typ)
+      # TODO(purag): do I really need to use t-top here?
+      each(lam(stmt): check-templates(binds, stmt, t-top(A.dummy-loc, false), context) end, stmts)
+      check-templates(binds, stmts.last(), typ, context)
     end
     | s-user-block(l, body) => block:
       print("s-user-block")
-      check-templates(binds, body, typ)
+      check-templates(binds, body, typ, context)
     end
     | s-fun(l, name, params, args, ann, doc, body, _check-loc, _check, blocky) => block:
       print("found a function with ann = ")
       print(ann)
-      check-templates(binds, body, ann)
+      shadow typ = to-type(ann, context).bind(lam(maybe-type, shadow context):
+        cases(Option<Type>) maybe-type:
+          | none => fold-result(t-top(A.dummy-loc, false), context)
+          | some(shadow typ) => fold-result(typ, context)
+        end
+      end).v
+      check-templates(binds, body, typ, context)
     end
     | s-when(l, test, block, blocky) => block:
       print("s-when")
-      check-templates(binds, block, typ)
+      check-templates(binds, block, typ, context)
     end
 
     | s-if-pipe(l, branches, blocky) => block:
       print("s-if-pipe")
       each(lam(b) block:
-        check-templates(binds, b.test, t-boolean(A.dummy-loc))
-        check-templates(binds, b.body, typ)
+        check-templates(binds, b.test, t-boolean(A.dummy-loc), context)
+        check-templates(binds, b.body, typ, context)
       end, branches)
     end
     | s-if-pipe-else(l, branches, _else, blocky) => block:
       print("s-if-pipe-else")
       each(lam(b) block:
-        check-templates(binds, b.test, t-boolean(A.dummy-loc))
-        check-templates(binds, b.body, typ)
+        check-templates(binds, b.test, t-boolean(A.dummy-loc), context)
+        check-templates(binds, b.body, typ, context)
       end, branches)
     end
     | s-if(l, branches, blocky) => block:
       print("s-if")
       each(lam(b) block:
-        check-templates(binds, b.test, t-boolean(A.dummy-loc))
-        check-templates(binds, b.body, typ)
+        check-templates(binds, b.test, t-boolean(A.dummy-loc), context)
+        check-templates(binds, b.body, typ, context)
       end, branches)
     end
     | s-if-else(l, branches, _else, blocky) => block:
       print("s-if-else")
       each(lam(b) block:
-        check-templates(binds, b.test, t-boolean(A.dummy-loc))
-        check-templates(binds, b.body, typ)
+        check-templates(binds, b.test, t-boolean(A.dummy-loc), context)
+        check-templates(binds, b.body, typ, context)
       end, branches)
-      check-templates(binds, _else, typ)
+      check-templates(binds, _else, typ, context)
     end
     | s-cases(l, matchtyp, val, branches, blocky) => block:
       print("s-cases")
-      each(lam(b): check-templates(binds, b.body, typ) end, branches)
+      each(lam(b): check-templates(binds, b.body, typ, context) end, branches)
     end
     | s-cases-else(l, matchtyp, val, branches, _else, blocky) => block:
       print("s-cases-else")
-      each(lam(b): check-templates(binds, b.body, typ) end, branches)
+      each(lam(b): check-templates(binds, b.body, typ, context) end, branches)
     end
 
     | s-lam(l, name, params, args, ann, doc, body, _check-loc, _check, blocky) => block:
       print("s-lam")
-      check-templates(binds, body, typ)
+      print(ann)
+      print(typ)
+      lamtyp = to-type(ann, context).bind(lam(maybe-type, shadow context):
+        cases(Option<Type>) maybe-type:
+          | none => fold-result(t-top(A.dummy-loc, false), context)
+          | some(shadow typ) => block:
+            print(typ)
+            fold-result(typ, context)
+          end
+        end
+      end).v
+      print("\nfunction")
+      print(name)
+      print("returns")
+      print(if TS.is-t-top(lamtyp): typ else: lamtyp end)
+      print("\n")
+      # hack: use the propagated type if the lam type is Any
+      check-templates(binds, body, if TS.is-t-top(lamtyp): typ else: lamtyp end, context)
     end
     | s-method(l, name, params, args, ann, doc, body, _check-loc, _check, blocky) => block:
       print("s-method")
-      check-templates(binds, body, typ)
+      print(ann)
+      shadow typ = to-type(ann, context).bind(lam(maybe-type, shadow context):
+        cases(Option<Type>) maybe-type:
+          | none => fold-result(t-top(A.dummy-loc, false), context)
+          | some(shadow typ) => fold-result(typ, context)
+        end
+      end).v
+      check-templates(binds, body, typ, context)
     end
     | s-for(l, iterator, bindings, ann, body, blocky) => block:
       print("s-for")
-      check-templates(binds, body, typ)
+      check-templates(binds, body, typ, context)
     end
     | s-paren(l, expr) => block:
       print("s-paren")
-      check-templates(binds, expr, typ)
+      check-templates(binds, expr, typ, context)
     end
     | s-assign(l, id, value) => block:
       print("s-assign")
       # TODO(purag): actually get the type of this ID
-      check-templates(binds, value, typ)
+      check-templates(binds, value, typ, context)
     end
     | s-op(l, op-l, op, left, right) => block:
       print("s-op")
-      check-templates(binds, left, typ)
-      check-templates(binds, left, typ)
+      check-templates(binds, left, typ, context)
+      check-templates(binds, left, typ, context)
     end
     | s-var(l, name, value) => block:
       print("s-var")
-      check-templates(binds, value, t-top(A.dummy-loc, false))
+      check-templates(binds, value, typ, context)
     end
     | s-rec(l, name, value) => block:
       print("s-rec")
-      check-templates(binds, value, t-top(A.dummy-loc, false))
+      check-templates(binds, value, typ, context)
     end
     | s-let(l, name, value, keyword-val) => block:
       print("s-let")
-      check-templates(binds, value, t-top(A.dummy-loc, false))
+      check-templates(binds, value, typ, context)
     end
 
     | s-data(l, name, params, mixins, variants, shared-members, _check-loc) => block:
@@ -453,17 +496,26 @@ fun check-templates(binds, e :: Expr, typ :: Type):
     end
     | s-module(l, answer, defined-values, defined-types, provided-values, provided-types, checks) => block:
       print("s-module")
-      check-templates(binds, answer, typ)
-      each(lam(val): check-templates(binds, val.value, typ) end, defined-values)
-      check-templates(binds, provided-values, typ)
+      check-templates(binds, answer, typ, context)
+      each(lam(val): check-templates(binds, val.value, typ, context) end, defined-values)
+      check-templates(binds, provided-values, typ, context)
     end
 
     | s-obj(l, fields) => block:
       print("s-obj")
       each(lam(field) block:
         cases(A.Member) field:
-          | s-data-field(shadow l, name, value) => check-templates(binds, value, typ)
-          | else => check-templates(binds, field.value, field.ann)
+          | s-data-field(shadow l, name, value) => check-templates(binds, value, typ, context)
+          | else => block:
+            print(field.ann)
+            shadow typ = to-type(field.ann, context).bind(lam(maybe-type, shadow context):
+              cases(Option<Type>) maybe-type:
+                | none => fold-result(t-top(A.dummy-loc, false), context)
+                | some(shadow typ) => fold-result(typ, context)
+              end
+            end).v
+            check-templates(binds, field.value, typ, context)
+          end
         end
       end, fields)
     end
@@ -501,7 +553,6 @@ fun check-templates(binds, e :: Expr, typ :: Type):
     # | s-frac(l, num, den)
     # | s-rfrac(l, num, den)
     # | s-bool(l, b)
-    # | s-str(l, s)
     # | s-dot(l, obj, field)
     # | s-get-bang(l, obj, field)
     # | s-bracket(l, obj, key)
