@@ -293,7 +293,20 @@ fun type-check(program :: A.Program, compile-env :: C.CompileEnvironment, module
 end
 
 # TODO(purag)
-# fun get-bind-by-id(binds, id):
+fun get-bind-by-id(binds, id):
+  cases(List) binds:
+    | empty => nothing
+    | link(shadow bind, rest) => block:
+      if (A.is-LetBind(bind) or A.is-LetrecBind(bind)) and (bind.bind.id == id):
+        bind
+      else if A.is-TypeLetBind(bind) and (bind.name == id):
+        bind
+      else:
+        get-bind-by-id(rest, id)
+      end
+    end
+  end
+end
 
 # TODO(purag)
 fun check-templates(binds, e :: Expr, typ :: Type, context :: Context):
