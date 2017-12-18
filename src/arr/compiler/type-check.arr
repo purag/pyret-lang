@@ -94,6 +94,12 @@ string-dict = SD.string-dict
 
 is-s-check-test = A.is-s-check-test
 
+# dictionary from template srcloc -> {function name; typing context}
+var template-ctx-dict = SD.make-string-dict()
+
+# keep track of the current function we're type checking
+var cur-fun = ""
+
 ################### Test Inference ####################
 
 # an option containing the key of the function name,
@@ -298,7 +304,7 @@ fun checking(e, expect-typ, top-level, context) block:
   _checking(e, expect-typ, top-level, context)
 end
 
-fun _checking(e :: Expr, expect-type :: Type, top-level :: Boolean, context :: Context) -> TypingResult:
+fun _checking(e :: Expr, expect-type :: Type, top-level :: Boolean, context :: Context) -> TypingResult block:
   shadow context = context.add-level()
   shadow expect-type = resolve-alias(expect-type, context)
   cases(Type) expect-type:
@@ -364,7 +370,21 @@ fun _checking(e :: Expr, expect-type :: Type, top-level :: Boolean, context :: C
               end)
             end)
         | s-template(l) =>
-          typing-result(e, expect-type, context)
+          res = typing-result(e, expect-type, context)
+
+          print("\ndo some synthesis!!!\n")
+          cases(Option<Expr>) cur-fun._check block:
+            | some(checkexpr) => print(checkexpr)
+            | else => nothing
+          end
+          print("\n")
+
+          # print("\n\n")
+          # print(res.solve-bind())
+          # print("\n\n")
+          # print(context.info)
+          # print("\n\n")
+          res
         | s-type-let-expr(l, binds, body, blocky) =>
           handle-type-let-binds(binds, context).typing-bind(lam(_, shadow context):
             checking(body, expect-type, true, context)
@@ -490,6 +510,7 @@ fun _checking(e :: Expr, expect-type :: Type, top-level :: Boolean, context :: C
         | s-paren(l, expr) =>
           raise("s-paren should have already been desugared")
         | s-lam(l, name, params, args, ann, doc, body, _check-loc, _check, b) =>
+          cur-fun := e 
           check-fun(l, body, params, args, ann, expect-type, A.s-lam(l, name, params, _, _, doc, _, _check-loc, _check, b), context)
         | s-method(l, name, params, args, ann, doc, body, _check-loc, _check, b) =>
           raise("checking for s-method not implemented")
@@ -624,7 +645,7 @@ end
 
 fun _synthesis(e :: Expr, top-level :: Boolean, context :: Context) -> TypingResult:
   shadow context = context.add-level()
-  cases(Expr) e:
+  cases(Expr) e block:
     | s-module(l, answer, defined-values, defined-types, provided-values, provided-types, checks) =>
       synthesis(answer, false, context)
         .map-expr(A.s-module(l, _, defined-values, defined-types, provided-values, provided-types, checks))

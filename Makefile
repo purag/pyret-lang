@@ -338,4 +338,8 @@ new-bootstrap: no-diff-standalone $(PHASE0BUILD)
 no-diff-standalone: phaseB phaseC
 	diff $(PHASEB)/pyret.jarr $(PHASEC)/pyret.jarr
 
+refreshtest:
+	touch ../examples/insert-bst-examples.arr
 
+dotest: phaseA refreshtest
+	node src/server/pyret.js -y ../examples/insert-bst-examples.arr
